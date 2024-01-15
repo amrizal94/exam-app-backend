@@ -21,9 +21,9 @@ func Register(db *gorm.DB) gin.HandlerFunc {
 		Password string `valid:"required,minstringlength(6)~password: must be at least 6 characters"`
 	}
 	return func(ctx *gin.Context) {
-		request := app.User{}
 
 		// get request body
+		request := app.User{}
 		if err := ctx.ShouldBind(&request); err != nil {
 			helper.ErrJSON(ctx, http.StatusBadRequest, err.Error())
 		}
@@ -84,6 +84,40 @@ func Register(db *gorm.DB) gin.HandlerFunc {
 
 func Login(db *gorm.DB) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+
+		// get request body
+		request := app.User{}
+		if err := ctx.ShouldBind(&request); err != nil {
+			helper.ErrJSON(ctx, http.StatusBadRequest, err.Error())
+		}
+
+		// check username and get password hashed from database
+		password := request.Password
+		user := models.User{}
+		result := db.Select("id", "password").Where("username = ?", request.Username).Find(&user)
+		if result.RowsAffected == 0 {
+			err := "user not registered"
+			helper.ErrJSON(ctx, http.StatusUnauthorized, err)
+			return
+		}
+
+		// check password
+		if !helper.CheckPasswordHash(password, user.Password) {
+			helper.ErrJSON(ctx, http.StatusUnauthorized, "wrong password")
+			return
+		}
+
+		// generate token for jwt authorization
+		token, err := helper.GenerateToken(user.ID)
+		if err != nil {
+			helper.ErrJSON(ctx, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{
+			"status": "success",
+			"token":  token,
+		})
 
 	}
 }
